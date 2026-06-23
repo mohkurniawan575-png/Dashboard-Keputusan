@@ -1,0 +1,487 @@
+<style>
+    /* style.css - Modernized Hyper-Glass Aesthetic */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;550;600;700;800&display=swap');
+
+    :root {
+        --glass-bg: rgba(15, 23, 42, 0.4);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-glow: rgba(59, 130, 246, 0.05);
+        --accent-primary: #6366f1;
+        /* Indigo 500 */
+        --accent-secondary: #06b6d4;
+        /* Cyan 500 */
+        --accent-glow: rgba(99, 102, 241, 0.2);
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: #020617;
+        /* Absolute dark Slate 950 */
+        overflow-x: hidden;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    .font-jakarta {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    /* Mesh Background Engine */
+    .mesh-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        background: radial-gradient(at 0% 0%, rgba(30, 58, 138, 0.15) 0px, transparent 50%),
+            radial-gradient(at 100% 0%, rgba(79, 70, 229, 0.1) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(30, 58, 138, 0.15) 0px, transparent 50%),
+            radial-gradient(at 0% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
+        filter: blur(80px);
+        animation: meshMove 20s ease infinite alternate;
+    }
+
+    @keyframes meshMove {
+        0% {
+            transform: scale(1);
+        }
+
+        100% {
+            transform: scale(1.1);
+        }
+    }
+
+    /* Premium Glassmorphism */
+    .glass {
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px) saturate(180%);
+        -webkit-backdrop-filter: blur(12px) saturate(180%);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+            0 2px 4px -1px rgba(0, 0, 0, 0.06),
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-header {
+        background: rgba(2, 6, 23, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    .glass-hover:hover {
+        transform: translateY(-4px) scale(1.01);
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(99, 102, 241, 0.3);
+        box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.5),
+            0 0 20px 0 rgba(99, 102, 241, 0.1);
+    }
+
+    /* Advanced Badges */
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        transition: all 0.2s;
+    }
+
+    .badge-done {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-process {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .badge-pending {
+        background: rgba(14, 165, 233, 0.1);
+        color: #0ea5e9;
+        border: 1px solid rgba(14, 165, 233, 0.2);
+    }
+
+    .badge-rejected {
+        background: rgba(244, 63, 94, 0.1);
+        color: #f43f5e;
+        border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+
+    .badge-default {
+        background: rgba(148, 163, 184, 0.1);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    /* Modern Scrollbar */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-primary);
+    }
+
+    /* Animation Classes */
+    .reveal {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .reveal.active {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .stagger-1 {
+        transition-delay: 0.1s;
+    }
+
+    .stagger-2 {
+        transition-delay: 0.2s;
+    }
+
+    .stagger-3 {
+        transition-delay: 0.3s;
+    }
+
+    .stagger-4 {
+        transition-delay: 0.4s;
+    }
+
+    .stagger-5 {
+        transition-delay: 0.5s;
+    }
+
+    /* Table Enhancements */
+    table thead th {
+        background: rgba(255, 255, 255, 0.02);
+        color: #94a3b8;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    .group-header {
+        background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), transparent) !important;
+        font-weight: 800;
+        color: var(--accent-secondary);
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 0.75rem;
+    }
+
+    tr:hover td {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Inputs & Selects */
+    input[type="text"],
+    input[type="month"],
+    select {
+        background: rgba(15, 23, 42, 0.5) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        transition: all 0.3s;
+    }
+
+    input:focus,
+    select:focus {
+        border-color: var(--accent-primary) !important;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+        outline: none;
+    }
+
+    /* Chart Containers */
+    .chart-container-premium {
+        position: relative;
+        padding-top: 1.5rem;
+    }
+
+    .chart-container-premium::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 2px;
+        background: var(--accent-primary);
+        border-radius: 99px;
+        opacity: 0.3;
+    }
+
+    /* ============================================================
+       LIGHT THEME — Comprehensive High-Contrast Overrides
+       Dark Mode rules above are NOT affected.
+    ============================================================ */
+
+    /* ── Base & Background ─────────────────────────────────── */
+    body.light-theme {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+
+    body.light-theme .mesh-bg {
+        background:
+            radial-gradient(at 0% 0%,   rgba(99, 102, 241, 0.07) 0px, transparent 50%),
+            radial-gradient(at 100% 0%, rgba(79,  70, 229, 0.06) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(30, 58, 138, 0.05) 0px, transparent 50%),
+            radial-gradient(at 0% 100%, rgba(6, 182, 212, 0.06) 0px, transparent 50%) !important;
+    }
+
+    /* ── Navbar ─────────────────────────────────────────────── */
+    body.light-theme .glass-header {
+        background: rgba(255, 255, 255, 0.92) !important;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.15) !important;
+        box-shadow: 0 1px 12px 0 rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* Navbar title */
+    body.light-theme .glass-header h1 {
+        color: #0f172a !important;
+    }
+
+    /* Navbar subtitle */
+    body.light-theme .glass-header p {
+        color: #64748b !important;
+    }
+
+    /* Navbar "Rekap Data" button */
+    body.light-theme .glass-header a {
+        background: rgba(99, 102, 241, 0.08) !important;
+        border-color: rgba(99, 102, 241, 0.25) !important;
+        color: #3730a3 !important;
+    }
+    body.light-theme .glass-header a:hover {
+        background: rgba(99, 102, 241, 0.16) !important;
+    }
+    body.light-theme .glass-header a i {
+        color: #4f46e5 !important;
+    }
+
+    /* Theme-toggle icon wrapper */
+    body.light-theme .glass-header .bg-indigo-600\/20 {
+        background: rgba(99, 102, 241, 0.12) !important;
+        border-color: rgba(99, 102, 241, 0.3) !important;
+    }
+
+    /* ── Glass Cards ─────────────────────────────────────────── */
+    body.light-theme .glass {
+        background: rgba(255, 255, 255, 0.82) !important;
+        border: 1px solid rgba(148, 163, 184, 0.35) !important;
+        box-shadow:
+            0 1px 3px rgba(0, 0, 0, 0.06),
+            0 4px 16px rgba(0, 0, 0, 0.06),
+            inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    }
+
+    body.light-theme .glass-hover:hover {
+        background: rgba(255, 255, 255, 0.97) !important;
+        border-color: rgba(99, 102, 241, 0.35) !important;
+        box-shadow:
+            0 8px 30px rgba(99, 102, 241, 0.12),
+            0 2px 8px rgba(0, 0, 0, 0.06) !important;
+    }
+
+    /* ── Text Hierarchy ──────────────────────────────────────── */
+    /* white / slate-200  →  near-black (headings, values) */
+    body.light-theme .text-white,
+    body.light-theme .text-slate-200 {
+        color: #0f172a !important;
+    }
+
+    /* slate-400 / slate-500  →  medium grey (subtitles, labels) */
+    body.light-theme .text-slate-400,
+    body.light-theme .text-slate-500 {
+        color: #475569 !important;
+    }
+
+    /* slate-1000 (custom class used in kpiAvgSkSub etc.) */
+    body.light-theme .text-slate-1000 {
+        color: #334155 !important;
+    }
+
+    /* ── KPI Cards ───────────────────────────────────────────── */
+    /* KPI number colours stay vivid; only labels/icons need fixing */
+    body.light-theme .text-emerald-400 { color: #059669 !important; }
+    body.light-theme .text-amber-400   { color: #d97706 !important; }
+    body.light-theme .text-sky-400     { color: #0284c7 !important; }
+    body.light-theme .text-rose-400    { color: #e11d48 !important; }
+    body.light-theme .text-violet-300  { color: #7c3aed !important; }
+    body.light-theme .text-teal-300    { color: #0f766e !important; }
+    body.light-theme .text-indigo-400  { color: #4f46e5 !important; }
+
+    /* percentage text next to KPI numbers */
+    body.light-theme .text-emerald-500\/60 { color: #059669 !important; opacity: 0.75; }
+    body.light-theme .text-amber-500\/60   { color: #d97706 !important; opacity: 0.75; }
+    body.light-theme .text-sky-500\/60     { color: #0284c7 !important; opacity: 0.75; }
+    body.light-theme .text-rose-500\/60    { color: #e11d48 !important; opacity: 0.75; }
+
+    /* KPI icon wrappers */
+    body.light-theme .bg-white\/5 {
+        background-color: rgba(99, 102, 241, 0.07) !important;
+    }
+    body.light-theme .border-white\/5 {
+        border-color: rgba(148, 163, 184, 0.35) !important;
+    }
+
+    /* Ambient glow orbs inside KPI cards */
+    body.light-theme .bg-indigo-500\/10 { background-color: rgba(99, 102, 241, 0.06) !important; }
+    body.light-theme .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.06) !important; }
+    body.light-theme .bg-amber-500\/10  { background-color: rgba(245, 158, 11, 0.06) !important; }
+    body.light-theme .bg-sky-500\/10    { background-color: rgba(14, 165, 233, 0.06) !important; }
+    body.light-theme .bg-rose-500\/10   { background-color: rgba(244, 63, 94, 0.06) !important; }
+    body.light-theme .bg-violet-500\/10 { background-color: rgba(124, 58, 237, 0.06) !important; }
+    body.light-theme .bg-teal-500\/10   { background-color: rgba(20, 184, 166, 0.06) !important; }
+
+    /* Badge pills on average cards */
+    body.light-theme .bg-violet-500\/10.border-violet-500\/20 {
+        background: rgba(124, 58, 237, 0.10) !important;
+        border-color: rgba(124, 58, 237, 0.28) !important;
+        color: #6d28d9 !important;
+    }
+    body.light-theme .bg-teal-500\/10.border-teal-500\/20 {
+        background: rgba(20, 184, 166, 0.10) !important;
+        border-color: rgba(20, 184, 166, 0.28) !important;
+        color: #0f766e !important;
+    }
+    body.light-theme .text-violet-400\/60 { color: #7c3aed !important; }
+    body.light-theme .text-teal-400\/60   { color: #0f766e !important; }
+
+    /* Divider lines inside cards */
+    body.light-theme .border-white\/5 {
+        border-color: rgba(148, 163, 184, 0.3) !important;
+    }
+
+    /* ── Status Badges ───────────────────────────────────────── */
+    body.light-theme .badge-done {
+        background: rgba(5, 150, 105, 0.12) !important;
+        color: #047857 !important;
+        border-color: rgba(5, 150, 105, 0.30) !important;
+    }
+    body.light-theme .badge-process {
+        background: rgba(217, 119, 6, 0.12) !important;
+        color: #b45309 !important;
+        border-color: rgba(217, 119, 6, 0.30) !important;
+    }
+    body.light-theme .badge-pending {
+        background: rgba(2, 132, 199, 0.12) !important;
+        color: #0369a1 !important;
+        border-color: rgba(2, 132, 199, 0.30) !important;
+    }
+    body.light-theme .badge-rejected {
+        background: rgba(225, 29, 72, 0.12) !important;
+        color: #be123c !important;
+        border-color: rgba(225, 29, 72, 0.30) !important;
+    }
+    body.light-theme .badge-default {
+        background: rgba(71, 85, 105, 0.10) !important;
+        color: #334155 !important;
+        border-color: rgba(71, 85, 105, 0.25) !important;
+    }
+
+    /* ── Table ───────────────────────────────────────────────── */
+    body.light-theme table thead th {
+        background: rgba(99, 102, 241, 0.05) !important;
+        color: #334155 !important;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.15) !important;
+    }
+    body.light-theme table tbody td {
+        color: #1e293b !important;
+        border-color: rgba(148, 163, 184, 0.2) !important;
+    }
+    body.light-theme tr:hover td {
+        background: rgba(99, 102, 241, 0.04) !important;
+    }
+    body.light-theme .group-header {
+        background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), transparent) !important;
+        color: #4338ca !important;
+    }
+
+    /* ── Form Inputs & Selects ───────────────────────────────── */
+    body.light-theme input[type="text"],
+    body.light-theme input[type="month"],
+    body.light-theme select {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border: 1px solid rgba(148, 163, 184, 0.5) !important;
+        color: #1e293b !important;
+    }
+    body.light-theme input::placeholder,
+    body.light-theme select option {
+        color: #64748b !important;
+    }
+    body.light-theme input:focus,
+    body.light-theme select:focus {
+        border-color: #6366f1 !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    body.light-theme button.bg-white\/5,
+    body.light-theme a.bg-white\/5 {
+        background: rgba(99, 102, 241, 0.08) !important;
+        border-color: rgba(99, 102, 241, 0.25) !important;
+        color: #3730a3 !important;
+    }
+    body.light-theme button.bg-white\/5:hover,
+    body.light-theme a.bg-white\/5:hover {
+        background: rgba(99, 102, 241, 0.15) !important;
+    }
+
+    /* ── Icons ───────────────────────────────────────────────── */
+    body.light-theme .text-slate-400 i,
+    body.light-theme .text-slate-500 i {
+        color: #475569 !important;
+    }
+    body.light-theme .text-blue-400  { color: #2563eb !important; }
+    body.light-theme .text-violet-400 { color: #7c3aed !important; }
+    body.light-theme .text-teal-400  { color: #0f766e !important; }
+
+    /* ── Chart Containers ─────────────────────────────────────── */
+    body.light-theme .chart-container-premium::before {
+        opacity: 0.5;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    body.light-theme footer {
+        background: rgba(241, 245, 249, 0.8) !important;
+        border-top: 1px solid rgba(148, 163, 184, 0.35) !important;
+    }
+    body.light-theme .bg-slate-900\/20 {
+        background-color: rgba(226, 232, 240, 0.6) !important;
+    }
+    body.light-theme footer p {
+        color: #64748b !important;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    body.light-theme ::-webkit-scrollbar-thumb {
+        background: rgba(99, 102, 241, 0.25) !important;
+    }
+    body.light-theme ::-webkit-scrollbar-thumb:hover {
+        background: #6366f1 !important;
+    }
+</style>

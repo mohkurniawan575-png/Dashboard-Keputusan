@@ -1,0 +1,656 @@
+<script>
+    // app.js - Modernized Hyper-Glass Dashboard Logic
+
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1RmsEwIf4urU07eKZvDlOUGr9gCYgFJn77XumVZbrJi0/export?format=csv&gid=963010276';
+    const RAW_DATA_URL = 'https://docs.google.com/spreadsheets/d/1RmsEwIf4urU07eKZvDlOUGr9gCYgFJn77XumVZbrJi0/export?format=csv&gid=1107361178';
+
+    // State
+    let rawData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const itemsPerPage = 50;
+    let currentSort = { column: 'NO.', direction: 'desc' };
+
+    // Custom Chart.js Plugins
+    const centerTextPlugin = {
+        id: 'centerText',
+        afterDraw(chart) {
+            const { ctx, chartArea: { top, bottom, left, right, width, height } } = chart;
+            const options = chart.config.options.plugins.centerText;
+            if (!options || options.total === undefined) return;
+
+            const isLight = document.body.classList.contains('light-theme');
+
+            ctx.save();
+            const isHalf = chart.config.options.circumference === 180;
+            const centerX = left + width / 2;
+            const centerY = isHalf ? bottom - 5 : top + height / 2;
+
+            ctx.font = `800 ${(height / (isHalf ? 140 : 110)).toFixed(2)}em "Plus Jakarta Sans"`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+            ctx.fillText(options.total.toString(), centerX, centerY - (isHalf ? 15 : 0));
+
+            ctx.font = `bold ${(height / (isHalf ? 550 : 450)).toFixed(2)}em Inter`;
+            ctx.letterSpacing = '2px';
+            ctx.fillStyle = isLight ? '#475569' : '#64748b';
+            ctx.fillText('TOTAL', centerX, centerY + (isHalf ? 10 : 25));
+            ctx.restore();
+        }
+    };
+
+    const sliceDataLabelsPlugin = {
+        id: 'sliceDataLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            const isLight = document.body.classList.contains('light-theme');
+            ctx.save();
+            ctx.font = 'bold 12px "Plus Jakarta Sans"';
+            ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (meta.hidden) return;
+
+                meta.data.forEach((element, index) => {
+                    const value = dataset.data[index];
+                    if (value !== undefined && value !== null) {
+                        const { x, y } = element.tooltipPosition();
+
+                        if (chart.config.type === 'line') {
+                            // For line charts, show label above the point
+                            ctx.fillText(value, x, y - 15);
+                        } else if (chart.config.options.indexAxis === 'y' && element.base !== undefined) {
+                            // For horizontal stacked bars, center the text
+                            const centerX = (x + element.base) / 2;
+                            if (value > 0) ctx.fillText(value, centerX, y);
+                        } else {
+                            if (value > 0) ctx.fillText(value, x, y);
+                        }
+                    }
+                });
+            });
+            ctx.restore();
+        }
+    };
+
+    // Chart Instances
+    let trendChartInstance = null;
+    let typeChart1Instance = null;
+    let typeChart2Instance = null;
+    let departmentChartInstance = null;
+    let departmentChart2Instance = null;
+
+    // DOM Elements
+    const loadingState = document.getElementById('loadingState');
+    const dashboardContent = document.getElementById('dashboardContent');
+    const lastUpdated = document.getElementById('lastUpdated');
+
+    const kpiReceived = document.getElementById('kpiReceived');
+    const kpiProcess = document.getElementById('kpiProcess');
+    const kpiDone = document.getElementById('kpiDone');
+    const kpiPending = document.getElementById('kpiPending');
+    const kpiRejected = document.getElementById('kpiRejected');
+
+    const kpiReceivedPct = document.getElementById('kpiReceivedPct');
+    const kpiProcessPct = document.getElementById('kpiProcessPct');
+    const kpiDonePct = document.getElementById('kpiDonePct');
+    const kpiPendingPct = document.getElementById('kpiPendingPct');
+    const kpiRejectedPct = document.getElementById('kpiRejectedPct');
+
+    const kpiAvgSk = document.getElementById('kpiAvgSk');
+    const kpiAvgWaktu = document.getElementById('kpiAvgWaktu');
+
+
+
+
+
+    function applyChartTheme(isLight) {
+        const textColor   = isLight ? '#334155' : '#94a3b8';
+        const borderColor = isLight ? 'rgba(99, 102, 241, 0.12)' : 'rgba(255, 255, 255, 0.05)';
+        const tooltipBg   = isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(15, 23, 42, 0.9)';
+        const tooltipText = isLight ? '#0f172a' : '#ffffff';
+        const legendColor = isLight ? '#475569' : '#94a3b8';
+
+        Chart.defaults.color = textColor;
+        Chart.defaults.borderColor = borderColor;
+
+        const instances = [trendChartInstance, typeChart1Instance, typeChart2Instance, departmentChartInstance, departmentChart2Instance];
+
+        instances.forEach(instance => {
+            if (!instance) return;
+
+            // Tooltip
+            if (instance.options.plugins && instance.options.plugins.tooltip) {
+                instance.options.plugins.tooltip.backgroundColor = tooltipBg;
+                instance.options.plugins.tooltip.titleColor = tooltipText;
+                instance.options.plugins.tooltip.bodyColor = tooltipText;
+                if (isLight) {
+                    instance.options.plugins.tooltip.borderColor = 'rgba(99, 102, 241, 0.2)';
+                    instance.options.plugins.tooltip.borderWidth = 1;
+                    instance.options.plugins.tooltip.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                }
+            }
+
+            // Legend label colour
+            if (instance.options.plugins && instance.options.plugins.legend &&
+                instance.options.plugins.legend.labels) {
+                instance.options.plugins.legend.labels.color = legendColor;
+            }
+
+            // Scale grids & ticks
+            if (instance.options.scales) {
+                if (instance.options.scales.x && instance.options.scales.x.grid) {
+                    instance.options.scales.x.grid.color = borderColor;
+                }
+                if (instance.options.scales.y && instance.options.scales.y.grid) {
+                    instance.options.scales.y.grid.color = borderColor;
+                }
+                if (instance.options.scales.y && instance.options.scales.y.ticks) {
+                    instance.options.scales.y.ticks.color = textColor;
+                }
+                if (instance.options.scales.x && instance.options.scales.x.ticks) {
+                    instance.options.scales.x.ticks.color = textColor;
+                }
+            }
+            instance.update();
+        });
+    }
+
+    function toggleTheme() {
+        const body = document.body;
+        const icon = document.getElementById('themeIcon');
+        const isLight = body.classList.toggle('light-theme');
+
+        if (isLight) {
+            icon.classList.replace('ph-moon', 'ph-sun');
+            localStorage.setItem('theme', 'light');
+        } else {
+            icon.classList.replace('ph-sun', 'ph-moon');
+            localStorage.setItem('theme', 'dark');
+        }
+
+        applyChartTheme(isLight);
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.weight = '500';
+
+        const savedTheme = localStorage.getItem('theme');
+        const isLight = savedTheme === 'light';
+        if (isLight) {
+            document.body.classList.add('light-theme');
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.classList.replace('ph-moon', 'ph-sun');
+        }
+
+        Chart.defaults.color = isLight ? '#475569' : '#94a3b8';
+        Chart.defaults.borderColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.05)';
+
+        fetchData();
+
+        setupRevealObserver();
+    });
+
+    function setupRevealObserver() {
+        const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+    }
+
+
+
+    function fetchData() {
+        loadingState.classList.remove('hidden');
+        dashboardContent.classList.add('hidden');
+
+        Promise.all([
+            fetch(SHEET_URL).then(res => res.text()),
+            fetch(RAW_DATA_URL).then(res => res.text())
+        ]).then(([sheetCsv, rawDataCsv]) => {
+            const lines = sheetCsv.split('\n');
+            const actualCsvText = lines.slice(2).join('\n');
+
+            Papa.parse(actualCsvText, {
+                header: true,
+                transformHeader: h => h.trim(),
+                skipEmptyLines: true,
+                complete: result => {
+                    Papa.parse(rawDataCsv, {
+                        header: false,
+                        complete: rawResult => processData(result.data, rawResult.data)
+                    });
+                }
+            });
+        }).catch(err => {
+            console.error("Data Load Error:", err);
+            loadingState.innerHTML = `<div class="glass p-8 rounded-2xl border-rose-500/20 text-center">
+                <i class="ph ph-warning-circle text-4xl text-rose-500 mb-4"></i>
+                <p class="text-rose-400 font-bold">Gagal memuat data: ${err.message}</p>
+            </div>`;
+        });
+    }
+
+    function parseSheetDate(dateStr) {
+        if (!dateStr) return null;
+        dateStr = dateStr.trim();
+        let d;
+        if (dateStr.includes('/')) {
+            const p = dateStr.split('/');
+            d = new Date(p[2], p[1] - 1, p[0]);
+        } else if (dateStr.includes('-')) {
+            const p = dateStr.split('-');
+            d = p[0].length === 4 ? new Date(dateStr) : new Date(p[2], p[1] - 1, p[0]);
+        } else { d = new Date(dateStr); }
+        return (d && !isNaN(d.getTime())) ? d : null;
+    }
+
+    function processData(data, rawDataSheet) {
+        rawData = data.filter(r => r['NO.'] && r['JUDUL KEPUTUSAN'] && !r['NO.'].includes('URAIAN'));
+        filteredData = [...rawData];
+
+        updateKPIs(filteredData, rawDataSheet);
+        renderCharts(filteredData, rawDataSheet);
+
+        // Pembaruan Terakhir: Hari kerja pertama pada bulan berjalan
+        const today = new Date();
+        let firstWorkingDay = new Date(today.getFullYear(), today.getMonth(), 1);
+
+        // Maju satu hari jika jatuh pada Sabtu (6) atau Minggu (0)
+        while (firstWorkingDay.getDay() === 0 || firstWorkingDay.getDay() === 6) {
+            firstWorkingDay.setDate(firstWorkingDay.getDate() + 1);
+        }
+
+        lastUpdated.textContent = firstWorkingDay.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        loadingState.classList.add('hidden');
+        dashboardContent.classList.remove('hidden');
+        setTimeout(setupRevealObserver, 100); // Re-run observer after content shows
+    }
+
+    function updateKPIs(data, rawSheet) {
+        const c = { total: data.length, done: 0, proc: 0, pend: 0, rej: 0 };
+        data.forEach(r => {
+            const keys = Object.keys(r);
+            const s = (r[keys[6]] || '').toLowerCase(); // Column G
+            if (s === 'done') c.done++;
+            else if (s.includes('progres') || s.includes('process')) c.proc++;
+            else if (s === 'pending') c.pend++;
+            else if (s === 'rejected') c.rej++;
+        });
+
+        animateValue(kpiReceived, 0, c.total, 1000);
+        animateValue(kpiDone, 0, c.done, 1000);
+        animateValue(kpiProcess, 0, c.proc, 1000);
+        animateValue(kpiPending, 0, c.pend, 1000);
+        animateValue(kpiRejected, 0, c.rej, 1000);
+
+        // Update Percentages
+        const formatPct = (val, total) => {
+            if (!total) return '(0,00%)';
+            const pct = (val / total * 100).toFixed(2);
+            return `(${pct.replace('.', ',')}%)`;
+        };
+
+        if (kpiReceivedPct) kpiReceivedPct.textContent = '(100,00%)';
+        if (kpiDonePct) kpiDonePct.textContent = formatPct(c.done, c.total);
+        if (kpiProcessPct) kpiProcessPct.textContent = formatPct(c.proc, c.total);
+        if (kpiPendingPct) kpiPendingPct.textContent = formatPct(c.pend, c.total);
+        if (kpiRejectedPct) kpiRejectedPct.textContent = formatPct(c.rej, c.total);
+
+        // --- Avg Usulan SK per Bulan ---
+        const currentMonthCount = new Date().getMonth() + 1; // Jumlah bulan berjalan
+        let avgSk = 0;
+        if (rawSheet && rawSheet[30] && rawSheet[30][1]) {
+            avgSk = parseFloat(rawSheet[30][1]) || 0;
+        } else {
+            avgSk = Math.round(c.total / currentMonthCount); // Fallback
+        }
+
+        if (kpiAvgSk) animateValue(kpiAvgSk, 0, avgSk, 1000);
+        const kpiAvgSkSub = document.getElementById('kpiAvgSkSub');
+        if (kpiAvgSkSub) kpiAvgSkSub.textContent = `Rata-rata dari ${c.total} berkas dalam ${currentMonthCount} bulan berjalan`;
+
+        // --- Avg Lama Pengerjaan SK ---
+        const kpiAvgWaktuSub = document.getElementById('kpiAvgWaktuSub');
+
+        let avgWaktu = 0;
+        if (rawSheet && rawSheet[31] && rawSheet[31][1]) {
+            avgWaktu = parseFloat(rawSheet[31][1]) || 0;
+        }
+
+        // render
+        if (kpiAvgWaktu) animateValue(kpiAvgWaktu, 0, avgWaktu, 1000);
+
+        // keterangan sinkron dengan perhitungan
+        if (kpiAvgWaktuSub) {
+            kpiAvgWaktuSub.textContent = c.done > 0
+                ? `Rata-rata berdasarkan ${c.done} Total Completed SK`
+                : 'Belum ada data SK yang selesai';
+        }
+    }
+
+
+    function animateValue(obj, start, end, duration) {
+        let startTimestamp = null;
+        const step = (ts) => {
+            if (!startTimestamp) startTimestamp = ts;
+            const progress = Math.min((ts - startTimestamp) / duration, 1);
+            obj.innerHTML = Math.floor(progress * (end - start) + start);
+            if (progress < 1) window.requestAnimationFrame(step);
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    function renderCharts(data, rawSheet) {
+        // 1. Trend Chart (dari Raw Data range A7:B18)
+        const trendLabels = [];
+        const trendData = [];
+
+        if (rawSheet) {
+            // A7 adalah baris ke-7 (index 6). Ambil 12 bulan (sampai index 17).
+            for (let i = 6; i < 18; i++) {
+                if (rawSheet[i]) {
+                    const label = (rawSheet[i][0] || '').trim(); // Kolom A
+                    const value = parseFloat(rawSheet[i][1]) || 0; // Kolom B
+
+                    if (label) {
+                        trendLabels.push(label);
+                        trendData.push(value);
+                    }
+                }
+            }
+        }
+
+        if (trendChartInstance) trendChartInstance.destroy();
+        trendChartInstance = new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'SK Masuk',
+                    data: trendData,
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: '#6366f1',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { family: 'Plus Jakarta Sans', size: 13 },
+                        bodyFont: { family: 'Inter', size: 12 },
+                        padding: 12,
+                        cornerRadius: 10
+                    }
+                },
+                scales: {
+                    y: {
+                        display: false,
+                        beginAtZero: true,
+                        grid: { display: false }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { weight: 'bold' }
+                        }
+                    }
+                },
+                layout: {
+                    padding: {
+                        top: 20 // Extra space for labels above the highest point
+                    }
+                }
+            },
+            plugins: [sliceDataLabelsPlugin]
+        });
+
+        // 2. Type Chart 1
+        let gov = 0, sek = 0;
+        data.forEach(r => {
+            const t = (r['JENIS SK'] || '').toLowerCase();
+            if (t.includes('gubernur')) gov++; else if (t.includes('sekda')) sek++;
+        });
+
+        if (typeChart1Instance) typeChart1Instance.destroy();
+        typeChart1Instance = new Chart(document.getElementById('typeChart1').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Jenis Keputusan'],
+                datasets: [
+                    {
+                        label: 'Gubernur',
+                        data: [gov],
+                        backgroundColor: '#6366f1',
+                        borderRadius: { topLeft: 12, bottomLeft: 12, topRight: gov > 0 && sek === 0 ? 12 : 0, bottomRight: gov > 0 && sek === 0 ? 12 : 0 },
+                        barThickness: 40
+                    },
+                    {
+                        label: 'Sekda',
+                        data: [sek],
+                        backgroundColor: '#10b981',
+                        borderRadius: { topRight: 12, bottomRight: 12, topLeft: sek > 0 && gov === 0 ? 12 : 0, bottomLeft: sek > 0 && gov === 0 ? 12 : 0 },
+                        barThickness: 40
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, padding: 20, font: { weight: 'bold' } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { family: 'Plus Jakarta Sans', size: 13 },
+                        bodyFont: { family: 'Inter', size: 12 },
+                        padding: 12,
+                        cornerRadius: 10,
+                        displayColors: true
+                    }
+                },
+                scales: {
+                    x: { stacked: true, display: false, grid: { display: false } },
+                    y: { stacked: true, display: false, grid: { display: false } }
+                }
+            },
+            plugins: [sliceDataLabelsPlugin]
+        });
+
+        // 3. Type Chart 2
+        let prc = 0, pnd = 0;
+        data.forEach(r => {
+            const keys = Object.keys(r);
+            const s = (r[keys[6]] || '').toLowerCase(); // Column G
+            if (s.includes('progres') || s.includes('process')) prc++; else if (s === 'pending') pnd++;
+        });
+
+        if (typeChart2Instance) typeChart2Instance.destroy();
+        typeChart2Instance = new Chart(document.getElementById('typeChart2').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Status Pengerjaan'],
+                datasets: [
+                    {
+                        label: 'On Progres',
+                        data: [prc],
+                        backgroundColor: '#f59e0b',
+                        borderRadius: { topLeft: 12, bottomLeft: 12, topRight: prc > 0 && pnd === 0 ? 12 : 0, bottomRight: prc > 0 && pnd === 0 ? 12 : 0 },
+                        barThickness: 40
+                    },
+                    {
+                        label: 'Pending',
+                        data: [pnd],
+                        backgroundColor: '#0ea5e9',
+                        borderRadius: { topRight: 12, bottomRight: 12, topLeft: pnd > 0 && prc === 0 ? 12 : 0, bottomLeft: pnd > 0 && prc === 0 ? 12 : 0 },
+                        barThickness: 40
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, padding: 20, font: { weight: 'bold' } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { family: 'Plus Jakarta Sans', size: 13 },
+                        bodyFont: { family: 'Inter', size: 12 },
+                        padding: 12,
+                        cornerRadius: 10,
+                        displayColors: true
+                    }
+                },
+                scales: {
+                    x: { stacked: true, display: false, grid: { display: false } },
+                    y: { stacked: true, display: false, grid: { display: false } }
+                }
+            },
+            plugins: [sliceDataLabelsPlugin]
+        });
+
+        // 4. Department Charts - Combined Stacked Bar
+        const extractCombinedData = (sheet, startRow, endRow) => {
+            const labels = [];
+            const gubernurValues = [];
+            const sekdaValues = [];
+            if (!sheet) return { labels, gubernurValues, sekdaValues };
+
+            for (let i = startRow - 1; i <= endRow - 1; i++) {
+                if (sheet[i]) {
+                    const label = (sheet[i][6] || '').trim(); // Col G
+                    const gValue = parseFloat(sheet[i][7]);   // Col H (Gubernur)
+                    const sValue = parseFloat(sheet[i][8]);   // Col I (Sekda)
+
+                    if (label && (gValue > 0 || sValue > 0)) {
+                        labels.push(label.length > 30 ? label.substring(0, 30) + '...' : label);
+                        gubernurValues.push(isNaN(gValue) ? 0 : gValue);
+                        sekdaValues.push(isNaN(sValue) ? 0 : sValue);
+                    }
+                }
+            }
+            return { labels, gubernurValues, sekdaValues };
+        };
+
+        const combinedData = extractCombinedData(rawSheet, 3, 53);
+        const deptCanvas = document.getElementById('departmentChart');
+
+        // Dynamic height: more space for stacked bars
+        deptCanvas.parentElement.style.height = Math.max(400, (combinedData.labels.length * 45)) + 'px';
+
+        if (departmentChartInstance) departmentChartInstance.destroy();
+        if (departmentChart2Instance) {
+            departmentChart2Instance.destroy();
+            departmentChart2Instance = null;
+        }
+
+        departmentChartInstance = new Chart(deptCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: combinedData.labels,
+                datasets: [
+                    {
+                        label: 'SK Gubernur',
+                        data: combinedData.gubernurValues,
+                        backgroundColor: '#6366f1',
+                        borderRadius: {
+                            topLeft: 6,
+                            bottomLeft: 6,
+                            topRight: (combinedData.sekdaValues.every((v, i) => v === 0 || combinedData.gubernurValues[i] === 0)) ? 6 : 0,
+                            bottomRight: (combinedData.sekdaValues.every((v, i) => v === 0 || combinedData.gubernurValues[i] === 0)) ? 6 : 0
+                        },
+                        barThickness: 22
+                    },
+                    {
+                        label: 'SK Sekda',
+                        data: combinedData.sekdaValues,
+                        backgroundColor: '#10b981',
+                        borderRadius: { topRight: 6, bottomRight: 6 },
+                        barThickness: 22
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: { weight: 'bold', size: 11 },
+                            color: '#94a3b8'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { family: 'Plus Jakarta Sans', size: 13 },
+                        bodyFont: { family: 'Inter', size: 12 },
+                        padding: 12,
+                        cornerRadius: 10,
+                        callbacks: {
+                            label: function (context) {
+                                return ` ${context.dataset.label}: ${context.parsed.x} berkas`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { font: { weight: 'bold' } }
+                    },
+                    y: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: {
+                            font: { weight: '600', size: 10 },
+                            color: '#cbd5e1'
+                        }
+                    }
+                }
+            },
+            plugins: [sliceDataLabelsPlugin]
+        });
+
+        // Apply theme colors to all just-created charts
+        applyChartTheme(document.body.classList.contains('light-theme'));
+    }
+
+
+</script>
