@@ -1,0 +1,487 @@
+<script>
+    // ═══════════════════════════════════════════════════════════════
+    //  Dashboard SK — Frontend Logic
+    // ═══════════════════════════════════════════════════════════════
+
+    const ANIM_DURATION = 1000;
+    const LOADING_TIMEOUT = 30000;
+
+    // ─── Chart Instances ──────────────────────────────────────────
+    let chartDecision = null;
+    let chartStatus = null;
+    let chartTrend = null;
+    let chartDept = null;
+
+    // ─── State ────────────────────────────────────────────────────
+    let analytics = null;
+    let _timer = null;
+
+    // ─── DOM Cache ────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
+    const loadingEl = $('loadingState');
+    const dashEl = $('dashboardContent');
+    const lastUpdEl = $('lastUpdated');
+
+    // KPI elements
+    const kpi = {
+        received: $('kpiReceived'), receivedPct: $('kpiReceivedPct'),
+        done: $('kpiDone'), donePct: $('kpiDonePct'),
+        process: $('kpiProcess'), processPct: $('kpiProcessPct'),
+        pending: $('kpiPending'), pendingPct: $('kpiPendingPct'),
+        rejected: $('kpiRejected'), rejectedPct: $('kpiRejectedPct'),
+        avgSk: $('kpiAvgSk'), avgSkSub: $('kpiAvgSkSub'),
+        avgWaktu: $('kpiAvgWaktu'), avgWaktuSub: $('kpiAvgWaktuSub')
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  UTILITIES
+    // ═══════════════════════════════════════════════════════════════
+
+    function animateValue(el, start, end, dur) {
+        let ts0 = null;
+        const step = ts => {
+            if (!ts0) ts0 = ts;
+            const p = Math.min((ts - ts0) / dur, 1);
+            el.textContent = Math.floor(p * (end - start) + start);
+            if (p < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    function fmtPct(val, total) {
+        if (!total) return '(0,00%)';
+        return '(' + (val / total * 100).toFixed(2).replace('.', ',') + '%)';
+    }
+
+    function tooltipCfg() {
+        return {
+            backgroundColor: 'rgba(15,23,42,0.92)',
+            titleFont: { family: 'Plus Jakarta Sans', size: 13 },
+            bodyFont: { family: 'Inter', size: 12 },
+            padding: 12, cornerRadius: 10
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CHART.JS PLUGIN — Data Labels on Slices/Bars/Points
+    // ═══════════════════════════════════════════════════════════════
+
+    const dataLabelsPlugin = {
+        id: 'dataLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            const isLight = document.body.classList.contains('light-theme');
+            ctx.save();
+            ctx.font = 'bold 12px "Plus Jakarta Sans"';
+            ctx.fillStyle = isLight ? '#0f172a' : '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            chart.data.datasets.forEach((ds, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (meta.hidden) return;
+                meta.data.forEach((el, idx) => {
+                    const v = ds.data[idx];
+                    if (v == null) return;
+                    const { x, y } = el.tooltipPosition();
+                    if (chart.config.type === 'line') {
+                        ctx.fillText(v, x, y - 16);
+                    } else if (chart.config.options.indexAxis === 'y' && el.base !== undefined) {
+                        const cx = (x + el.base) / 2;
+                        if (v > 0) ctx.fillText(v, cx, y);
+                    } else {
+                        if (v > 0) ctx.fillText(v, x, y);
+                    }
+                });
+            });
+            ctx.restore();
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  THEME
+    // ═══════════════════════════════════════════════════════════════
+
+    function applyChartTheme(isLight) {
+        const txt = isLight ? '#334155' : '#94a3b8';
+        const brd = isLight ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.05)';
+        const ttBg = isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.92)';
+        const ttTxt = isLight ? '#0f172a' : '#ffffff';
+        const legTxt = isLight ? '#475569' : '#94a3b8';
+
+        Chart.defaults.color = txt;
+        Chart.defaults.borderColor = brd;
+
+        [chartDecision, chartStatus, chartTrend, chartDept].filter(Boolean).forEach(c => {
+            const tp = c.options.plugins?.tooltip;
+            if (tp) {
+                tp.backgroundColor = ttBg;
+                tp.titleColor = ttTxt;
+                tp.bodyColor = ttTxt;
+                if (isLight) { tp.borderColor = 'rgba(99,102,241,0.2)'; tp.borderWidth = 1; }
+            }
+            const lg = c.options.plugins?.legend?.labels;
+            if (lg) lg.color = legTxt;
+            ['x', 'y'].forEach(ax => {
+                const sc = c.options.scales?.[ax];
+                if (sc?.grid) sc.grid.color = brd;
+                if (sc?.ticks) sc.ticks.color = txt;
+            });
+            c.update();
+        });
+    }
+
+    function toggleTheme() {
+        const isLight = document.body.classList.toggle('light-theme');
+        const icon = $('themeIcon');
+        icon.classList.replace(isLight ? 'ph-moon' : 'ph-sun', isLight ? 'ph-sun' : 'ph-moon');
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        applyChartTheme(isLight);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  INIT
+    // ═══════════════════════════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', () => {
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.weight = '500';
+
+        const isLight = localStorage.getItem('theme') === 'light';
+        if (isLight) {
+            document.body.classList.add('light-theme');
+            const icon = $('themeIcon');
+            if (icon) icon.classList.replace('ph-moon', 'ph-sun');
+        }
+        Chart.defaults.color = isLight ? '#475569' : '#94a3b8';
+        Chart.defaults.borderColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)';
+
+        fetchData();
+        setupReveal();
+    });
+
+    function setupReveal() {
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(e => {
+                if (e.isIntersecting) { e.target.classList.add('active'); obs.unobserve(e.target); }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+        document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DATA FETCHING
+    // ═══════════════════════════════════════════════════════════════
+
+    function showError(msg, icon) {
+        if (_timer) { clearTimeout(_timer); _timer = null; }
+        loadingEl.innerHTML = `<div class="glass p-8 rounded-2xl border-rose-500/20 text-center max-w-md">
+        <i class="${icon || 'ph ph-warning-circle'} text-4xl text-rose-500 mb-4 block"></i>
+        <p class="text-rose-400 font-bold">${msg}</p>
+    </div>`;
+    }
+
+    function fetchData() {
+        loadingEl.classList.remove('hidden');
+        dashEl.classList.add('hidden');
+
+        _timer = setTimeout(() => showError('Waktu pemuatan habis. Silakan refresh halaman.', 'ph ph-clock-countdown'), LOADING_TIMEOUT);
+
+        google.script.run
+            .withSuccessHandler(res => {
+                if (_timer) { clearTimeout(_timer); _timer = null; }
+                if (!res || typeof res !== 'object') {
+                    showError('Server mengembalikan respons kosong. Silakan refresh halaman.');
+                    return;
+                }
+                if (res.error) { showError(res.error); return; }
+                try { processData(res); }
+                catch (e) { console.error('processData:', e); showError('Gagal memproses data: ' + e.message); }
+            })
+            .withFailureHandler(err => {
+                if (_timer) { clearTimeout(_timer); _timer = null; }
+                console.error('Fetch error:', err);
+                showError('Gagal memuat data: ' + (err.message || err));
+            })
+            .getDashboardData();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  DATA PROCESSING
+    // ═══════════════════════════════════════════════════════════════
+
+    function processData(res) {
+        analytics = res.analytics || null;
+
+        if (!analytics) {
+            showError('Data analytics kosong dari server.');
+            return;
+        }
+
+        const sc = analytics.statusCounts || { total: 0, done: 0, proc: 0, pend: 0, rej: 0 };
+
+        updateKPIs(sc);
+        renderDecisionChart(analytics.decisionTypes);
+        renderStatusChart(analytics.statusMonitoring);
+        renderTrendChart(analytics.monthlyTrend);
+        renderDeptChart(analytics.departmentRanking);
+        applyChartTheme(document.body.classList.contains('light-theme'));
+
+        lastUpdEl.textContent = res.lastUpdate || '-';
+
+        // Set Rekap Data link to active spreadsheet URL
+        const rekapLink = $('rekapDataLink');
+        if (rekapLink && res.spreadsheetUrl) {
+            rekapLink.href = res.spreadsheetUrl;
+        }
+
+        loadingEl.classList.add('hidden');
+        dashEl.classList.remove('hidden');
+        setTimeout(setupReveal, 100);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  KPI CARDS
+    // ═══════════════════════════════════════════════════════════════
+
+    function updateKPIs(sc) {
+        animateValue(kpi.received, 0, sc.total, ANIM_DURATION);
+        animateValue(kpi.done, 0, sc.done, ANIM_DURATION);
+        animateValue(kpi.process, 0, sc.proc, ANIM_DURATION);
+        animateValue(kpi.pending, 0, sc.pend, ANIM_DURATION);
+        animateValue(kpi.rejected, 0, sc.rej, ANIM_DURATION);
+
+        kpi.receivedPct.textContent = '(100,00%)';
+        kpi.donePct.textContent = fmtPct(sc.done, sc.total);
+        kpi.processPct.textContent = fmtPct(sc.proc, sc.total);
+        kpi.pendingPct.textContent = fmtPct(sc.pend, sc.total);
+        kpi.rejectedPct.textContent = fmtPct(sc.rej, sc.total);
+
+        // Monthly incoming average
+        const mi = analytics.monthlyIncoming || {};
+        const avg = mi.average || 0;
+        animateValue(kpi.avgSk, 0, avg, ANIM_DURATION);
+        const trendMonths = (analytics.monthlyTrend && analytics.monthlyTrend.labels)
+            ? analytics.monthlyTrend.labels.length : 0;
+        kpi.avgSkSub.textContent = trendMonths > 0
+            ? `Berdasarkan ${sc.total} berkas dari ${trendMonths} bulan`
+            : 'Belum ada data tren bulanan';
+
+        // Processing time
+        const pt = analytics.processingTime || {};
+        animateValue(kpi.avgWaktu, 0, pt.average || 0, ANIM_DURATION);
+        const completedCount = (analytics.statusCounts && analytics.statusCounts.done) || 0;
+        kpi.avgWaktuSub.textContent = completedCount > 0
+            ? `Berdasarkan ${completedCount} SK yang selesai`
+            : 'Belum ada SK selesai';
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CHART RENDERERS
+    // ═══════════════════════════════════════════════════════════════
+
+    const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#f43f5e', '#8b5cf6', '#14b8a6', '#ef4444', '#06b6d4', '#84cc16'];
+
+    /** Single-edge border radius helper for horizontal bars. */
+    function edgeRadius(left, right, r) {
+        return {
+            topLeft: left ? r : 0, bottomLeft: left ? r : 0,
+            topRight: right ? r : 0, bottomRight: right ? r : 0
+        };
+    }
+
+    // ── Decision Type Chart ───────────────────────────────────────
+
+    function renderDecisionChart(dt) {
+        const labels = (dt && dt.labels) || [];
+        const values = (dt && dt.values) || [];
+        const colors = labels.map((_, i) => COLORS[i % COLORS.length]);
+
+        if (chartDecision) chartDecision.destroy();
+
+        if (labels.length <= 2) {
+            // Horizontal stacked bar
+            const a = values[0] || 0, b = values[1] || 0;
+            chartDecision = new Chart($('decisionChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Jenis Keputusan'],
+                    datasets: [
+                        {
+                            label: labels[0] || '-', data: [a], backgroundColor: colors[0],
+                            borderRadius: edgeRadius(true, a > 0 && b === 0, 12), barThickness: 44
+                        },
+                        {
+                            label: labels[1] || '-', data: [b], backgroundColor: colors[1],
+                            borderRadius: edgeRadius(b > 0 && a === 0, true, 12), barThickness: 44
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20, font: { weight: 'bold' } } },
+                        tooltip: tooltipCfg()
+                    },
+                    scales: {
+                        x: { stacked: true, display: false, grid: { display: false } },
+                        y: { stacked: true, display: false, grid: { display: false } }
+                    }
+                },
+                plugins: [dataLabelsPlugin]
+            });
+        } else {
+            // Doughnut
+            chartDecision = new Chart($('decisionChart').getContext('2d'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 8 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '65%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { weight: 'bold', size: 11 } } },
+                        tooltip: tooltipCfg()
+                    }
+                },
+                plugins: [dataLabelsPlugin]
+            });
+        }
+    }
+
+    // ── Status Monitoring — Stacked Progress Bar ──────────────────
+
+    function renderStatusChart(sm) {
+        if (!sm) sm = { completed: 0, onProgress: 0, pending: 0, rejected: 0 };
+
+        const total = (sm.completed || 0) + (sm.onProgress || 0) + (sm.pending || 0) + (sm.rejected || 0);
+
+        // All 4 statuses, sorted descending by value
+        const items = [
+            { label: 'Completed', val: sm.completed || 0, color: '#10b981' },
+            { label: 'On Progress', val: sm.onProgress || 0, color: '#f59e0b' },
+            { label: 'Pending', val: sm.pending || 0, color: '#0ea5e9' },
+            { label: 'Rejected', val: sm.rejected || 0, color: '#f43f5e' }
+        ].sort((a, b) => b.val - a.val);
+
+        if (chartStatus) chartStatus.destroy();
+
+        // Build datasets — first segment gets left radius, last gets right radius
+        const datasets = items.map((x, i) => ({
+            label: x.label,
+            data: [x.val],
+            backgroundColor: x.color,
+            borderRadius: edgeRadius(i === 0, i === items.length - 1, 12),
+            barThickness: 48
+        }));
+
+        chartStatus = new Chart($('statusChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: ['Status Pengerjaan'], datasets },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, padding: 20, font: { weight: 'bold' } }
+                    },
+                    tooltip: {
+                        ...tooltipCfg(),
+                        callbacks: {
+                            label: function (ctx) {
+                                const v = ctx.parsed.x;
+                                const pct = total > 0 ? (v / total * 100).toFixed(1) : '0.0';
+                                return ' ' + ctx.dataset.label + ': ' + v + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { stacked: true, display: false, grid: { display: false } },
+                    y: { stacked: true, display: false, grid: { display: false } }
+                }
+            },
+            plugins: [dataLabelsPlugin]
+        });
+    }
+
+    // ── Monthly Trend Line Chart ──────────────────────────────────
+
+    function renderTrendChart(mt) {
+        const labels = (mt && mt.labels) || [];
+        const values = (mt && mt.values) || [];
+
+        if (chartTrend) chartTrend.destroy();
+        chartTrend = new Chart($('trendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'SK Masuk', data: values,
+                    borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)',
+                    borderWidth: 3, tension: 0.4, fill: true,
+                    pointBackgroundColor: '#6366f1', pointRadius: 5, pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: tooltipCfg() },
+                scales: {
+                    y: { display: false, beginAtZero: true, grid: { display: false } },
+                    x: { grid: { display: false }, ticks: { font: { weight: 'bold', size: 11 } } }
+                },
+                layout: { padding: { top: 24 } }
+            },
+            plugins: [dataLabelsPlugin]
+        });
+    }
+
+    // ── Department Ranking Chart ──────────────────────────────────
+
+    function renderDeptChart(dr) {
+        const labels = (dr && dr.labels) || [];
+        const gov = (dr && dr.gubernur) || [];
+        const sek = (dr && dr.sekda) || [];
+
+        const canvas = $('deptChart');
+        canvas.parentElement.style.height = Math.max(400, labels.length * 45) + 'px';
+
+        if (chartDept) chartDept.destroy();
+
+        const singleType = sek.every((v, i) => v === 0 || gov[i] === 0);
+
+        chartDept = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'SK Gubernur', data: gov, backgroundColor: '#6366f1',
+                        borderRadius: { topLeft: 6, bottomLeft: 6, topRight: singleType ? 6 : 0, bottomRight: singleType ? 6 : 0 },
+                        barThickness: 22
+                    },
+                    {
+                        label: 'SK Sekda', data: sek, backgroundColor: '#10b981',
+                        borderRadius: { topRight: 6, bottomRight: 6 },
+                        barThickness: 22
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true, position: 'top', align: 'end',
+                        labels: { usePointStyle: true, padding: 20, font: { weight: 'bold', size: 11 }, color: '#94a3b8' }
+                    },
+                    tooltip: { ...tooltipCfg(), callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.parsed.x + ' berkas' } }
+                },
+                scales: {
+                    x: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { font: { weight: 'bold' } } },
+                    y: { stacked: true, grid: { display: false }, ticks: { font: { weight: '600', size: 10 }, color: '#cbd5e1', callback: function (v) { return this.getLabelForValue(v).toUpperCase(); } } }
+                }
+            },
+            plugins: [dataLabelsPlugin]
+        });
+    }
+</script>
